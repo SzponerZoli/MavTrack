@@ -26,8 +26,8 @@ Győződj meg róla, hogy a következő eszközök telepítve vannak:
 1. Klónozd a projektet:
 
    ```bash
-   git clone https://github.com/felhasznalo/mav-vonatok-terkep.git
-   cd mav-vonatok-terkep
+   git clone https://github.com/NeonityDev/MavTrack.git
+   cd MavTrack
    ```
 
 2. Telepítsd a szükséges csomagokat:

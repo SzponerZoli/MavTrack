@@ -95,7 +95,8 @@
       }
 
       async function fetchGraphQL(query) {
-        const response = await fetch("http://localhost:3000/api/mav", {
+        const apiUrl = `${window.location.origin}/api/mav`; // Dinamikus API URL
+        const response = await fetch(apiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

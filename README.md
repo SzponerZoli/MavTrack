@@ -39,7 +39,7 @@ Győződj meg róla, hogy a következő eszközök telepítve vannak:
 3. Indítsd el a Node.js alapú proxyszervert:
 
    ```bash
-   node server.js
+   node proxy.js
    ```
 
    A szerver futni fog a `http://localhost:3000` címen.

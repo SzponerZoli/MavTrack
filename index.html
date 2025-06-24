@@ -13,9 +13,16 @@
       html {
         height: 100%;
         margin: 0;
+        padding: 0;
+        overflow: hidden;
       }
       #map {
-        height: 100vh;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
       }
       .popup-table {
         font-size: 14px;
@@ -43,31 +50,113 @@
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        padding: 10px;
-        font-size: 0.9em;
-        color: #555;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 15px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        padding: 15px 20px;
+        font-size: 0.95em;
+        color: #333;
         z-index: 1000;
         max-width: 300px;
+        transition: all 0.3s ease;
       }
+
+      #footer-bubble:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+      }
+
+      #footer-bubble a {
+        color: #2196F3;
+        text-decoration: none;
+        transition: color 0.2s ease;
+      }
+
+      #footer-bubble a:hover {
+        color: #1976D2;
+      }
+
       #footer-bubble-close {
         position: absolute;
-        top: 5px;
-        right: 10px;
+        top: 8px;
+        right: 12px;
         cursor: pointer;
         font-weight: bold;
-        color: #888;
+        color: #666;
+        transition: color 0.2s ease;
       }
+
       #footer-bubble-close:hover {
-        color: #000;
+        color: #333;
+      }
+
+      #stats {
+        position: fixed;
+        bottom: 0;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 15px 15px 0 0;
+        box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.1);
+        padding: 15px 25px;
+        font-size: 0.95em;
+        color: #333;
+        z-index: 1000;
+        min-width: 250px;
+        transform: translateY(calc(100% - 30px));
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      #stats.open {
+        transform: translateY(0);
+      }
+
+      #stats h3 {
+        margin: 0 0 10px 0;
+        font-size: 1.1em;
+        color: #1976D2;
+      }
+
+      #stats-toggle {
+        position: absolute;
+        top: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px 12px 0 0;
+        padding: 5px 20px;
+        cursor: pointer;
+        font-size: 0.9em;
+        color: #333;
+        transition: all 0.2s ease;
+      }
+
+      #stats-toggle:hover {
+        background: rgba(255, 255, 255, 0.95);
+        padding-top: 8px;
+      }
+
+      #stats-summary {
+        line-height: 1.6;
+        margin: 0;
       }
     </style>
   </head>
   <body>
     <div id="map"></div>
+    <div id="stats">
+      <div id="stats-toggle">▲</div>
+      <h3>Statisztika</h3>
+      <p id="stats-summary">Adatok betöltése...</p>
+    </div>
     <div id="footer-bubble">
       <span id="footer-bubble-close">&times;</span>
       <p>
@@ -112,10 +201,19 @@
         const vehicleQuery = `{ vehiclePositions(swLat: 45.5, swLon: 16.1, neLat: 48.7, neLon: 22.8, modes: [RAIL, RAIL_REPLACEMENT_BUS]) { trip { gtfsId tripShortName tripHeadsign } vehicleId lat lon label speed heading } }`;
         const data = await fetchGraphQL(vehicleQuery);
         const seenVehicleIds = new Set();
+        const delays = [];
+        const colorCounts = { green: 0, yellow: 0, orange: 0, red: 0 };
 
         for (const v of data.vehiclePositions) {
           seenVehicleIds.add(v.vehicleId);
-          fetchTripDelay(v);
+          const tripData = await fetchTripDelay(v);
+          if (tripData) {
+            const { delay, stopName, scheduled, actual, stoptimes } = tripData;
+            delays.push(delay);
+            const color = getColorByDelay(delay);
+            colorCounts[color]++;
+            displayMarker(v, delay, stopName, scheduled, actual, stoptimes);
+          }
         }
 
         for (const id of [...vehicleMarkers.keys()]) {
@@ -124,38 +222,30 @@
             vehicleMarkers.delete(id);
           }
         }
+
+        // Ellenőrizd, hogy van-e adat a statisztikához
+        if (delays.length > 0) {
+          updateStats(colorCounts, delays);
+        } else {
+          document.getElementById("stats-summary").innerHTML = "Nincs elérhető adat.";
+        }
       }
 
       async function fetchTripDelay(vehicle) {
         const gtfsId = vehicle.trip.gtfsId;
         const date = new Date().toISOString().split("T")[0];
-        const query = `{ trip(id: \"${gtfsId}\", serviceDay: \"${date}\") { tripHeadsign trainCategoryName trainName route { longName shortName } stoptimes { stop { name } realtimeArrival realtimeDeparture arrivalDelay scheduledArrival scheduledDeparture } } }`;
+        const query = `{ trip(id: \"${gtfsId}\", serviceDay: \"${date}\") { stoptimes { stop { name } realtimeArrival realtimeDeparture arrivalDelay scheduledArrival scheduledDeparture } } }`;
 
         const data = await fetchGraphQL(query);
-        const trip = data.trip;
-        if (!trip) return;
-
-        const stoptimes = trip.stoptimes;
-        const now = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-
-        for (let st of stoptimes) {
-          if (st.realtimeDeparture > now) {
-            const delay = st.arrivalDelay;
-            const stopName = st.stop.name;
-            const scheduled = secondsToHHMM(st.scheduledArrival);
-            const actual = secondsToHHMM(st.realtimeArrival);
-
-            displayMarker(
-              vehicle,
-              delay,
-              stopName,
-              scheduled,
-              actual,
-              stoptimes
-            );
-            break;
-          }
-        }
+        return data.trip.stoptimes
+          ? {
+              delay: data.trip.stoptimes[0].arrivalDelay,
+              stopName: data.trip.stoptimes[0].stop.name,
+              scheduled: secondsToHHMM(data.trip.stoptimes[0].scheduledArrival),
+              actual: secondsToHHMM(data.trip.stoptimes[0].realtimeArrival),
+              stoptimes: data.trip.stoptimes,
+            }
+          : null;
       }
 
       function secondsToHHMM(seconds) {
@@ -164,14 +254,25 @@
         return d.toISOString().substr(11, 5);
       }
 
-      function displayMarker(
-        vehicle,
-        delay,
-        stopName,
-        scheduled,
-        actual,
-        stoptimes
-      ) {
+      function updateStats(colorCounts, delays) {
+        const totalTrains = delays.length;
+        const avgDelay = delays.length
+          ? Math.round(delays.reduce((sum, d) => sum + d, 0) / delays.length / 60)
+          : 0;
+
+        const statsSummary = `
+          <b>Összes vonat:</b> ${totalTrains}<br>
+          🟢 <b>< 5 perc késés:</b> ${colorCounts.green}<br>
+          🟡 <b>5–19 perc késés:</b> ${colorCounts.yellow}<br>
+          🟠 <b>20–59 perc késés:</b> ${colorCounts.orange}<br>
+          🔴 <b>≥ 60 perc késés:</b> ${colorCounts.red}<br>
+          <b>Átlagos késés:</b> ${avgDelay} perc
+        `;
+
+        document.getElementById("stats-summary").innerHTML = statsSummary;
+      }
+
+      function displayMarker(vehicle, delay, stopName, scheduled, actual, stoptimes) {
         const id = vehicle.vehicleId;
         const lat = vehicle.lat;
         const lon = vehicle.lon;
@@ -192,13 +293,10 @@
           fillOpacity: 0.9,
         });
 
-        const hoverText = `<b>${name} → ${headsign}</b> • \n${speed} km/h • \n${Math.round(
-          delay / 60
-        )} perc késés`;
+        const hoverText = `<b>${name} → ${headsign}</b> • \n${speed} km/h • \n${Math.round(delay / 60)} perc késés`;
         circle.bindTooltip(hoverText);
 
-        let table =
-          '<table class="popup-table"><tr><th>Megálló</th><th>Tervezett</th><th>Tényleges</th><th>Késés (perc)</th></tr>';
+        let table = '<table class="popup-table"><tr><th>Megálló</th><th>Tervezett</th><th>Tényleges</th><th>Késés (perc)</th></tr>';
         for (const st of stoptimes) {
           const sName = st.stop.name;
           const sched = secondsToHHMM(st.scheduledArrival);
@@ -208,9 +306,7 @@
         }
         table += "</table>";
 
-        const popup = `<b>${name} → ${headsign}</b><br><b>Sebesség:</b> ${speed} km/h<br><b>Köv. megálló:</b> ${stopName}<br><b>Késés:</b> ${Math.round(
-          delay / 60
-        )} perc<br><b>Érkezés:</b> ${scheduled} (<span style="color: green">${actual}</span>)<br>${table}`;
+        const popup = `<b>${name} → ${headsign}</b><br><b>Sebesség:</b> ${speed} km/h<br><b>Köv. megálló:</b> ${stopName}<br><b>Késés:</b> ${Math.round(delay / 60)} perc<br><b>Érkezés:</b> ${scheduled} (<span style="color: green">${actual}</span>)<br>${table}`;
 
         circle.bindPopup(popup);
         circle.addTo(map);
@@ -222,6 +318,13 @@
 
       document.getElementById("footer-bubble-close").addEventListener("click", () => {
         document.getElementById("footer-bubble").style.display = "none";
+      });
+
+      document.getElementById("stats-toggle").addEventListener("click", () => {
+        const stats = document.getElementById("stats");
+        stats.classList.toggle("open");
+        const toggle = document.getElementById("stats-toggle");
+        toggle.textContent = stats.classList.contains("open") ? "▼" : "▲";
       });
     </script>
   </body>

@@ -28,10 +28,53 @@
         padding: 4px;
         text-align: left;
       }
+      #footer-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        text-align: center;
+        font-size: 0.9em;
+        color: #555;
+        padding: 5px 0;
+      }
+      #footer-bubble {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 10px;
+        font-size: 0.9em;
+        color: #555;
+        z-index: 1000;
+        max-width: 300px;
+      }
+      #footer-bubble-close {
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        cursor: pointer;
+        font-weight: bold;
+        color: #888;
+      }
+      #footer-bubble-close:hover {
+        color: #000;
+      }
     </style>
   </head>
   <body>
     <div id="map"></div>
+    <div id="footer-bubble">
+      <span id="footer-bubble-close">&times;</span>
+      <p>
+        Created by <a href="http://neonity.hu">Neonity</a> | Hosted by <a href="http://yoursit.ee/SzponerZoli">SzponerZoli</a> | 
+        <a href="https://github.com/NeonityDev/MavTrack" target="_blank">Source Code</a>
+      </p>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
@@ -175,6 +218,10 @@
 
       fetchAndDisplayTrains();
       setInterval(fetchAndDisplayTrains, 60000);
+
+      document.getElementById("footer-bubble-close").addEventListener("click", () => {
+        document.getElementById("footer-bubble").style.display = "none";
+      });
     </script>
   </body>
 </html>
